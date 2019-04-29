@@ -1,0 +1,53 @@
+class CheckMaterial(View):
+    def get(self, request):
+
+        global getWocode, getBatch
+
+        # 获取前端数据
+        Qrcode = str(request.GET.get("qrcode"))
+        getWocode = str(request.GET.get("wocode"))
+        getBatch = str(request.GET.get("batch"))
+
+        # 解码
+        QrcodeList = Qrcode.split(",")
+
+        if len(QrcodeList) > 0:  # 判断二维码是否有效
+            # 获取id
+
+            codeid = QrcodeList[1]
+
+            if QrcodeList[0] == "PL":  # 判断是否为配料二维码
+
+                # 查询配料过程过程是否有该记录
+                sql = f" select * from dbo.BurdenProcess where Id={codeid} "
+
+                # 执行数据库操作
+                cursor.execute(sql)
+                result = cursor.fetchone()
+
+                wocode = result["Wocode"]
+                batch = result["Batch"]
+
+                # 如果查询结果不为空
+                if result:
+
+                    # 如果工单号和批次号为空，将结果写入全局变量
+                    if getWocode == "" and getBatch == "":
+                        getWocode = wocode
+                        getBatch = batch
+
+                    # 判断锁定状态并更新状态
+                    resposeResult = check.UpdateState()
+
+                    # 返回前端
+                    return JsonResponse(resposeResult)
+
+                else:
+                    # 返回前端
+                    return JsonResponse({"Type": "error", "Error": 2})
+            else:
+                # 返回前端
+                return JsonResponse({"Type": "error", "Error": 1})
+        else:
+            # 返回前端
+            return JsonResponse({"Type": "error", "Error": 0})

@@ -1,0 +1,92 @@
+import pymssql
+
+# 连接数据库
+serverName = '172.16.1.12\WINCC'
+
+# 登陆用户和密码
+userName = "33020"
+password = "123456"
+
+# 数据库
+database = "PLK_NEW_DB"
+
+# 定义游标
+conn = pymssql.connect(serverName, userName, password, database, autocommit=True)
+cursor = conn.cursor(as_dict=True)
+
+
+def checkWocode(wocode, batch):
+    # 查询该工单的批次总数
+    sql = f"select * from dbo.Batch where Wocode='{wocode}';"
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    TotalCount = len(result)
+
+    # 查询该工单的批次已检料数
+    sql = f"select * from dbo.Batch where Status=3 and Wocode='{wocode}';"
+    cursor.execute(sql)
+    sqlresult = cursor.fetchall()
+    CompleteCount = len(sqlresult)
+
+    # 判断工单的批次是否全部检料
+    if TotalCount == CompleteCount:
+        # 更新工单的检料状态
+        sql = f"update dbo.Wocode set Status=3 where Wocode='{wocode}' and Status=2;"
+        cursor.execute(sql)
+
+
+def checkBatch(wocode, batch):
+    # 获取该批次的已配料数
+    sql = f"select * from dbo.BurdenProcess where Wocode='{wocode}' and WocodeBatch='{batch}'and State<>10 ;"
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    TotalCount = len(result)
+
+    # 获取该批次的已检料数
+    sql = f"select * from dbo.BurdenProcess where State=2 and Wocode='{wocode}' and WocodeBatch='{batch}';"
+    cursor.execute(sql)
+    sqlresult = cursor.fetchall()
+    CompleteCount = len(sqlresult)
+
+    if TotalCount == CompleteCount:
+        # 更新状态
+        sql = f"update dbo.Batch set Status=4 where Wocode='{wocode}' and Batch='{batch}' and Status=3;"
+        cursor.execute(sql)
+
+        # 检查工单
+        checkWocode(wocode, batch)
+
+        # 返回前端
+        return {"Type": "success", "Error": 5, "Wocode": wocode, "Batch": batch, "TotalCount": {TotalCount},
+                "CompleteCount": {CompleteCount}}
+
+
+def UpdateState(wocode, batch, getwocode, getbatch, id):
+    # 判断是否锁定
+    if wocode == getwocode and batch == getbatch:
+        # 查询该配料记录是否检料
+        sql = f"select *from dbo.BurdenProcess where Id={id} and State=1;"
+
+        # 执行数据库操作
+        cursor.execute(sql)
+        result = cursor.fetchone()
+
+        # 如果查询结果不为空
+        if result:
+            # 更新检料状态
+            sql = f"update dbo.BurdenProcess set State=2 where Id={id} and State=1;"
+            cursor.execute(sql)
+
+            # 检查批次
+            resposeResult = checkBatch(getwocode, getbatch)
+
+            # 返回前端
+            return resposeResult
+
+        else:
+            # 返回前端
+            return {"Type": "success", "Error": 4, "Wocode": getwocode, "Batch": getbatch, "TotalCount": 0,
+                    "CompleteCount": 0}
+    else:
+        # 返回前端
+        return {"Type": "error", "Error": 3}
